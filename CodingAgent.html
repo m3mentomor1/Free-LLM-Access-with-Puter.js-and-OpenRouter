@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Code Assistant AI (Claude)</title>
+
+  <!-- Markdown parser and sanitizer -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+
+  <!-- Google Fonts: Poppins -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f0f2f5;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 30px auto;
+      padding: 20px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+
+    h1 {
+      text-align: center;
+      font-weight: 600;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .chat-box {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 10px;
+    }
+
+    .bubble {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      line-height: 1.5;
+      font-size: 15px;
+      white-space: pre-wrap;
+    }
+
+    .bubble p {
+      margin: 4px 0;
+    }
+
+    .user-bubble {
+      background-color: #e0f7fa;
+      align-self: flex-end;
+    }
+
+    .ai-bubble {
+      background-color: #f1f1f1;
+      align-self: flex-start;
+    }
+
+    .responding-bubble {
+      font-style: italic;
+      opacity: 0.7;
+    }
+
+    .input-area {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #model-select {
+      width: fit-content;
+      max-width: 240px;
+      padding: 10px 34px 10px 14px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: white;
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg fill='gray' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 18px;
+    }
+
+    .prompt-container {
+      position: relative;
+    }
+
+    #prompt {
+      width: 100%;
+      padding: 12px 95px 26px 14px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      resize: vertical;
+      min-height: 80px;
+      box-sizing: border-box;
+    }
+
+    #generate {
+      position: absolute;
+      right: 10px;
+      bottom: 16px;
+      padding: 8px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      background-color: #10a37f;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    #generate:hover {
+      background-color: #0e8a6c;
+    }
+
+    .error-msg {
+      color: red;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Coding Agent</h1>
+
+    <!-- Chat messages shown above input -->
+    <div class="chat-box" id="response"></div>
+
+    <!-- Prompt input and model selector -->
+    <div class="input-area">
+      <select id="model-select">
+        <option value="openrouter:anthropic/claude-3.5-sonnet">Claude Sonnet 3.5</option>
+        <option value="openrouter:anthropic/claude-3.7-sonnet">Claude Sonnet 3.7</option>
+        <option value="openrouter:anthropic/claude-3.5-haiku">Claude Haiku 3.5</option>
+      </select>
+
+      <div class="prompt-container">
+        <textarea id="prompt" rows="4" placeholder="Ask a coding question..."></textarea>
+        <button id="generate">Generate</button>
+      </div>
+      <div id="error" class="error-msg"></div>
+    </div>
+  </div>
+
+  <script src="https://js.puter.com/v2/"></script>
+  <script>
+    const modelSelect = document.getElementById('model-select');
+    const promptInput = document.getElementById('prompt');
+    const responseDiv = document.getElementById('response');
+    const generateBtn = document.getElementById('generate');
+    const errorMsg = document.getElementById('error');
+
+    function isProgrammingRelated(text) {
+      const keywords = [
+        "html", "css", "javascript", "js", "python", "java", "c++", "c#", "typescript", "php",
+        "sql", "bash", "shell", "command", "cli", "terminal",
+        "react", "node", "express", "flask", "django", "vue", "angular", "svelte",
+        "tailwind", "bootstrap", "sass", "npm", "yarn", "webpack", "vite",
+        "mongodb", "postgresql", "mysql", "sqlite", "nosql", "api", "rest", "json", "axios", "fetch",
+        "next.js", "astro", "remix", "firebase", "supabase", "auth", "jwt",
+        "debug", "error", "bug", "crash", "log", "stack trace",
+        "ai", "ml", "llm", "api", "tensorflow", "pytorch", "openai", "anthropic",
+        "function", "variable", "loop", "array", "object", "class", "method", "syntax", "token",
+        "compile", "build", "run", "execute", "code", "script", "algorithm", "data structure"
+      ];
+      return keywords.some(word => text.toLowerCase().includes(word));
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      const selectedModel = modelSelect.value;
+      const prompt = promptInput.value.trim();
+      errorMsg.textContent = '';
+
+      if (!prompt) return;
+
+      if (!isProgrammingRelated(prompt)) {
+        errorMsg.textContent = "⚠️ Please enter a coding or programming-related question.";
+        return;
+      }
+
+      // Add user message
+      const userBubble = document.createElement('div');
+      userBubble.className = 'bubble user-bubble';
+      userBubble.textContent = prompt;
+      responseDiv.appendChild(userBubble);
+
+      // Add loading message
+      const loadingBubble = document.createElement('div');
+      loadingBubble.className = 'bubble ai-bubble responding-bubble';
+      loadingBubble.textContent = 'Responding...';
+      responseDiv.appendChild(loadingBubble);
+
+      responseDiv.scrollTop = responseDiv.scrollHeight;
+
+      try {
+        const raw = await puter.ai.chat(prompt, { model: selectedModel });
+        const rawText = typeof raw === "string"
+          ? raw
+          : raw?.message?.content || raw?.content || JSON.stringify(raw);
+
+        const html = DOMPurify.sanitize(marked.parse(rawText));
+
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'bubble ai-bubble';
+        aiBubble.innerHTML = html;
+
+        responseDiv.replaceChild(aiBubble, loadingBubble);
+        responseDiv.scrollTop = responseDiv.scrollHeight;
+      } catch (error) {
+        loadingBubble.textContent = `Error: ${error.message}`;
+        loadingBubble.style.color = 'red';
+      }
+    });
+  </script>
+</body>
+</html>
